@@ -53,7 +53,6 @@ class ScrapeData:
                                 print(f"Scraped {self.count} reviews.")
 
                                 if self.count >= max_reviews:
-                                    print(f"Reached the limit of {max_reviews} reviews.")
                                     break
                             
                             if self.count >= max_reviews:
@@ -82,21 +81,22 @@ class ScrapeData:
                     continue  # Skip to the next product in the list
 
                 if self.count >= max_reviews:
-                    print(f"Reached the limit of {max_reviews} reviews.")
                     break
             try:
                 self.driver.get(self.page_url)
                 next_page = self.driver.find_element(By.XPATH, f"//a[@class='s-pagination-item s-pagination-next s-pagination-button s-pagination-separator']")
-                next_page_url = next_page.get_attribute("href")
+                self.page_url = next_page.get_attribute("href")
 
-                # Navigate to the next products page
-                self.page_url = self.base_url + next_page_url
+                self.driver.get(self.page_url)
                 print('Next Page')
-                time.sleep(2)
+                time.sleep(5)
 
             except NoSuchElementException:
                 print('No more pages left')
                 break  # Exit the loop if there is no "Next page" button
+
+            if self.count >= max_reviews:
+                    break
 
         self.driver.quit()
 
@@ -107,7 +107,7 @@ if __name__=="__main__":
 
     obj=ScrapeData(url,path)
     
-    obj.scrapeReviews(11000)
+    obj.scrapeReviews(20000)
 
     # Create the "artifacts" directory if it doesn't exist
     os.makedirs("artifacts", exist_ok=True)
