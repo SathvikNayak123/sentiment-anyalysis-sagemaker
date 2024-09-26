@@ -2,5 +2,12 @@ bs4
 requests
 pandas
 numpy
+scikit-learn
 selenium
-
+nltk
+langdetect
+transformers
+datasets
+flask
+tensorflow
+tf-keras

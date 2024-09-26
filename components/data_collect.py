@@ -99,22 +99,4 @@ class ScrapeData:
                     break
 
         self.driver.quit()
-
-if __name__=="__main__":
-    url='https://www.amazon.com/s?k=redmi+earbuds&crid=3TZZRJIPFBP2E&sprefix=redmi+earbuds%2Caps%2C380&ref=nb_sb_noss_1'
-
-    path="chromedriver.exe"
-
-    obj=ScrapeData(url,path)
-    
-    obj.scrapeReviews(20000)
-
-    # Create the "artifacts" directory if it doesn't exist
-    os.makedirs("artifacts", exist_ok=True)
-
-    # Store the scraped data into a DataFrame
-    amazon_df = pd.DataFrame(obj.amazon_reviews, columns=["Review"])
-    
-    # Save to CSV
-    amazon_df.to_csv("artifacts/amazon_data.csv", index=False)
         
