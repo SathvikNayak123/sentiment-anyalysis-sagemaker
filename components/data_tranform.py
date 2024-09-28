@@ -1,20 +1,32 @@
-import pandas as pd
+# amazon_review_processor.py
 import re
 import nltk
+import pandas as pd
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from langdetect import detect, DetectorFactory
 from langdetect.lang_detect_exception import LangDetectException
 from transformers import pipeline
 from datasets import Dataset
+from utils import import_from_s3, upload_to_s3
 
+# Download necessary NLTK data
 nltk.download('stopwords')
 nltk.download('wordnet')
 nltk.download('omw-1.4')
 
 class AmazonReviewProcessor:
-    def __init__(self):
-        self.amazon_df = pd.read_csv('artifacts/amazon_data.csv')
+    def __init__(self, s3_input_bucket, s3_input_key, s3_output_bucket, s3_output_key):
+        self.s3_input_bucket = s3_input_bucket
+        self.s3_input_key = s3_input_key
+        self.s3_output_bucket = s3_output_bucket
+        self.s3_output_key = s3_output_key
+        
+        # Import DataFrame directly from S3
+        self.amazon_df = import_from_s3(self.s3_input_bucket, self.s3_input_key)
+        if self.amazon_df is None:
+            raise ValueError("Failed to import DataFrame from S3.")
+
         self.stop_words = set(stopwords.words('english'))
         self.lemmatizer = WordNetLemmatizer()
         self.classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
@@ -58,7 +70,10 @@ class AmazonReviewProcessor:
         # Apply preprocessing to the Reviews column
         self.amazon_df['Cleaned_Reviews'] = self.amazon_df['Review'].apply(self.preprocess_review)
         # Remove rows where Cleaned_Reviews is None (indicating non-English or empty reviews)
+        initial_count = len(self.amazon_df)
         self.amazon_df.dropna(subset=['Cleaned_Reviews'], inplace=True)
+        final_count = len(self.amazon_df)
+        print(f"Preprocessing complete. Dropped {initial_count - final_count} non-English or empty reviews.")
 
     def classify_reviews(self):
         # Convert DataFrame to Hugging Face Dataset for efficient batch processing
@@ -76,12 +91,44 @@ class AmazonReviewProcessor:
         classified_df = dataset.to_pandas()
         return classified_df[['Cleaned_Reviews', 'Pseudo_Labels']]
 
-    def save_cleaned_data(self, output_file):
+    def process_reviews(self):
+        """
+        Full processing pipeline: preprocess and classify reviews.
+        """
+        print("Starting preprocessing of reviews...")
+        self.apply_preprocessing()
+        print("Preprocessing done. Starting classification of reviews...")
         classified_df = self.classify_reviews()
-        classified_df.to_csv(output_file, index=False)
+        print("Classification done.")
+        return classified_df
 
-# Usage example
-if __name__ == '__main__':
-    processor = AmazonReviewProcessor()
-    processor.apply_preprocessing()
-    processor.save_cleaned_data('artifacts/data_cleaned.csv')
+    def save_cleaned_data_to_s3(self, classified_df):
+        """
+        Uploads the classified DataFrame to S3 as a CSV.
+        """
+        return upload_to_s3(classified_df, self.s3_output_bucket, self.s3_output_key)
+
+# Example Usage
+if __name__ == "__main__":
+    # Define your S3 bucket names and object keys
+    INPUT_BUCKET = 'your-input-s3-bucket-name'
+    INPUT_KEY = 'path/to/amazon_data.csv'  # Replace with your input CSV key in S3
+    OUTPUT_BUCKET = 'your-output-s3-bucket-name'
+    OUTPUT_KEY = 'path/to/data_cleaned.csv'  # Desired key for the output CSV in S3
+
+    # Initialize the processor
+    processor = AmazonReviewProcessor(
+        s3_input_bucket=INPUT_BUCKET,
+        s3_input_key=INPUT_KEY,
+        s3_output_bucket=OUTPUT_BUCKET,
+        s3_output_key=OUTPUT_KEY
+    )
+
+    # Process the reviews
+    processed_df = processor.process_reviews()
+
+    # Upload the processed DataFrame to S3
+    if processor.save_cleaned_data_to_s3(processed_df):
+        print("Processed data successfully uploaded to S3.")
+    else:
+        print("Failed to upload processed data to S3.")

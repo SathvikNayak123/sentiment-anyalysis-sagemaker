@@ -11,3 +11,4 @@ datasets
 flask
 tensorflow
 tf-keras
+boto3
