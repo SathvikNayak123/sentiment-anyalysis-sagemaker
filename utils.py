@@ -41,7 +41,7 @@ def upload_to_s3(df, s3_bucket, s3_key):
     except ClientError as e:
         print(f"Failed to upload to S3: {e}")
         return False
-    
+
 def model_to_s3(model_dir, s3_bucket, s3_key):
     """
     Compresses a local model directory into a ZIP file and uploads it to S3.
@@ -85,7 +85,7 @@ def model_from_s3(s3_bucket, s3_key, local_dir):
         print(f"Model ZIP '{zip_file}' successfully downloaded from s3://{s3_bucket}/{s3_key}")
         
         # Extract the ZIP file into the local directory
-        with ZipFile(zip_file, 'r') as zip_ref:
+        with zipfile.ZipFile(zip_file, 'r') as zip_ref:
             zip_ref.extractall(local_dir)
         print(f"Model ZIP '{zip_file}' extracted to '{local_dir}'.")
         

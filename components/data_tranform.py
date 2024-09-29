@@ -1,4 +1,3 @@
-# amazon_review_processor.py
 import re
 import nltk
 import pandas as pd
@@ -16,22 +15,22 @@ nltk.download('wordnet')
 nltk.download('omw-1.4')
 
 class AmazonReviewProcessor:
-    def __init__(self, s3_input_bucket, s3_input_key, s3_output_bucket, s3_output_key):
-        self.s3_input_bucket = s3_input_bucket
-        self.s3_input_key = s3_input_key
-        self.s3_output_bucket = s3_output_bucket
-        self.s3_output_key = s3_output_key
-        
-        # Import DataFrame directly from S3
-        self.amazon_df = import_from_s3(self.s3_input_bucket, self.s3_input_key)
-        if self.amazon_df is None:
-            raise ValueError("Failed to import DataFrame from S3.")
-
+    def __init__(self):
         self.stop_words = set(stopwords.words('english'))
         self.lemmatizer = WordNetLemmatizer()
         self.classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
         self.candidate_labels = ['positive', 'negative', 'neutral']
         DetectorFactory.seed = 0  # Consistency in language detection
+        self.class_weights = {'positive': 1.0,'negative': 1.0,'neutral': 10.0}
+        self.amazon_df = None
+
+    def import_data_from_s3(self, s3_input_bucket, s3_input_key):
+        """
+        Import the dataset from S3.
+        """
+        self.amazon_df = import_from_s3(s3_input_bucket, s3_input_key)
+        if self.amazon_df is None:
+            raise ValueError("Failed to import DataFrame from S3.")
 
     def detect_language(self, text):
         try:
@@ -54,17 +53,14 @@ class AmazonReviewProcessor:
         return ' '.join([self.lemmatizer.lemmatize(word) for word in review.split()])
 
     def preprocess_review(self, review):
-        if isinstance(review, str):  # Ensure the review is a valid string
-            # Detect language, and only process if it's English
-            if self.detect_language(review) != 'en':
-                return None
-            # Apply cleaning, stopword removal, and lemmatization
-            review = self.clean_text(review)
-            review = review.lower()
-            review = self.remove_stopwords(review)
-            review = self.lemmatize_text(review)
-            return review.strip() if len(review.strip()) > 0 else None
-        return None
+        if self.detect_language(review) != 'en':
+            return None
+        review = self.clean_text(review)
+        review = review.lower()
+        review = self.remove_stopwords(review)
+        review = self.lemmatize_text(review)
+        return review.strip() if len(review.strip()) > 0 else None
+
 
     def apply_preprocessing(self):
         # Apply preprocessing to the Reviews column
@@ -81,9 +77,21 @@ class AmazonReviewProcessor:
 
         # Function to classify each review using Zero-Shot Classification
         def classify_batch(batch):
-            result = self.classifier(batch['Cleaned_Reviews'], self.candidate_labels)
-            # Get the label with the highest score for each review
-            return {'Pseudo_Labels': [res['labels'][0] for res in result]}
+            result = self.classifier(batch['Cleaned_Reviews'], self.candidate_labels, multi_label=False)
+            adjusted_pseudo_labels = []
+            for res in result:
+                # Extract labels and scores
+                labels = res['labels']
+                scores = res['scores']
+
+                # Adjust scores with class weights
+                adjusted_scores = [score * self.class_weights[label] for label, score in zip(labels, scores)]
+
+                # Assign the label with the highest adjusted score
+                pseudo_label = labels[adjusted_scores.index(max(adjusted_scores))]
+                adjusted_pseudo_labels.append(pseudo_label)
+
+            return {'Pseudo_Labels': adjusted_pseudo_labels}
 
         # Apply the classification in batches using the map function
         dataset = dataset.map(classify_batch, batched=True, batch_size=16)  # Adjust batch size based on your GPU memory
@@ -102,33 +110,8 @@ class AmazonReviewProcessor:
         print("Classification done.")
         return classified_df
 
-    def save_cleaned_data_to_s3(self, classified_df):
+    def save_cleaned_data_to_s3(self, classified_df, s3_output_bucket, s3_output_key):
         """
         Uploads the classified DataFrame to S3 as a CSV.
         """
-        return upload_to_s3(classified_df, self.s3_output_bucket, self.s3_output_key)
-
-# Example Usage
-if __name__ == "__main__":
-    # Define your S3 bucket names and object keys
-    INPUT_BUCKET = 'your-input-s3-bucket-name'
-    INPUT_KEY = 'path/to/amazon_data.csv'  # Replace with your input CSV key in S3
-    OUTPUT_BUCKET = 'your-output-s3-bucket-name'
-    OUTPUT_KEY = 'path/to/data_cleaned.csv'  # Desired key for the output CSV in S3
-
-    # Initialize the processor
-    processor = AmazonReviewProcessor(
-        s3_input_bucket=INPUT_BUCKET,
-        s3_input_key=INPUT_KEY,
-        s3_output_bucket=OUTPUT_BUCKET,
-        s3_output_key=OUTPUT_KEY
-    )
-
-    # Process the reviews
-    processed_df = processor.process_reviews()
-
-    # Upload the processed DataFrame to S3
-    if processor.save_cleaned_data_to_s3(processed_df):
-        print("Processed data successfully uploaded to S3.")
-    else:
-        print("Failed to upload processed data to S3.")
+        return upload_to_s3(classified_df, s3_output_bucket, s3_output_key)

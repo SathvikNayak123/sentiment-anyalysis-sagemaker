@@ -1,9 +1,18 @@
 from flask import Flask, render_template, request
 from components.predict import SentimentPredictor
+import os
+from dotenv import load_dotenv
 
 app = Flask(__name__)
 
-predictor = SentimentPredictor()
+load_dotenv()
+S3_MODEL_BUCKET = os.getenv('S3_MODEL_BUCKET')
+S3_MODEL_KEY = os.getenv('S3_MODEL_KEY')
+
+predictor = SentimentPredictor(
+    s3_model_bucket=S3_MODEL_BUCKET,
+    s3_model_key=S3_MODEL_KEY
+)
 
 @app.route('/')
 def index():

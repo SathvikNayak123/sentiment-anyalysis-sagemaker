@@ -14,7 +14,7 @@ os.makedirs("artifacts", exist_ok=True)
 amazon_df = pd.DataFrame(obj.amazon_reviews, columns=["Review"])
 amazon_df.to_csv("artifacts/amazon_data.csv", index=False)
 
-S3_BUCKET = 'your-s3-bucket-name'  # Replace with your S3 bucket name
-S3_KEY = 'path/in/bucket/amazon_data.csv'  # Replace with your desired S3 object key
+S3_BUCKET = os.getenv('S3_DATA_BUCKET')
+S3_KEY = os.getenv('S3_DATA_KEY')
 
 upload_to_s3(amazon_df, S3_BUCKET, S3_KEY)
