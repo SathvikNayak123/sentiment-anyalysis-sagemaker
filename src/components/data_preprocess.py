@@ -7,28 +7,32 @@ from langdetect import detect, DetectorFactory
 from langdetect.lang_detect_exception import LangDetectException
 from transformers import pipeline
 from datasets import Dataset
-from utils import import_from_s3, upload_to_s3
+from src.components.utils import import_from_s3, upload_to_s3
 
 # Download necessary NLTK data
 nltk.download('stopwords')
 nltk.download('wordnet')
 nltk.download('omw-1.4')
 
-class AmazonReviewProcessor:
-    def __init__(self):
+class DataProcessor:
+    def __init__(self, s3_raw_bucket, s3_raw_key, s3_clean_bucket, s3_clean_key):
+        self.s3_raw_bucket = s3_raw_bucket
+        self.s3_raw_key = s3_raw_key
+        self.s3_clean_bucket = s3_clean_bucket
+        self.s3_clean_key = s3_clean_key
         self.stop_words = set(stopwords.words('english'))
         self.lemmatizer = WordNetLemmatizer()
         self.classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
         self.candidate_labels = ['positive', 'negative', 'neutral']
-        DetectorFactory.seed = 0  # Consistency in language detection
+        DetectorFactory.seed = 0
         self.class_weights = {'positive': 1.0,'negative': 1.0,'neutral': 10.0}
         self.amazon_df = None
 
-    def import_data_from_s3(self, s3_input_bucket, s3_input_key):
+    def import_data_from_s3(self):
         """
         Import the dataset from S3.
         """
-        self.amazon_df = import_from_s3(s3_input_bucket, s3_input_key)
+        self.amazon_df = import_from_s3(self.s3_raw_bucket, self.s3_raw_key)
         if self.amazon_df is None:
             raise ValueError("Failed to import DataFrame from S3.")
 
@@ -112,8 +116,8 @@ class AmazonReviewProcessor:
         print("Classification done.")
         return classified_df
 
-    def save_cleaned_data_to_s3(self, classified_df, s3_output_bucket, s3_output_key):
+    def save_cleaned_data_to_s3(self, classified_df):
         """
         Uploads the classified DataFrame to S3 as a CSV.
         """
-        return upload_to_s3(classified_df, s3_output_bucket, s3_output_key)
+        return upload_to_s3(classified_df, self.s3_clean_bucket, self.s3_clean_key)

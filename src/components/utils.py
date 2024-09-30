@@ -105,3 +105,4 @@ def model_from_s3(s3_bucket, s3_key, local_dir):
     except zipfile.BadZipFile:
         print(f"The file '{zip_file}' is not a valid ZIP archive.")
         return False
+    
