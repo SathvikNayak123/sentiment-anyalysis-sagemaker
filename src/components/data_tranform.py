@@ -53,6 +53,8 @@ class AmazonReviewProcessor:
         return ' '.join([self.lemmatizer.lemmatize(word) for word in review.split()])
 
     def preprocess_review(self, review):
+        if not isinstance(review, str):
+            return None
         if self.detect_language(review) != 'en':
             return None
         review = self.clean_text(review)

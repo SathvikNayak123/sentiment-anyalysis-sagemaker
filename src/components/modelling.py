@@ -61,16 +61,12 @@ class DataPrep:
         
         return train_split_df, val_df, test_df
 
-    def download_tokenizer(self, model_dir='artifacts/model/'):
+    def download_tokenizer(self):
         """
         Downloads the tokenizer/model from S3.
         """
-        print("Downloading tokenizer/model from S3...")
-        if not model_from_s3(self.s3_model_bucket, self.s3_model_key, model_dir):
-            raise ValueError("Failed to download tokenizer/model from S3.")
-        print("Tokenizer/model downloaded successfully.")
-        self.tokenizer = DistilBertTokenizer.from_pretrained(model_dir)
-        return self.tokenizer
+        print("Downloading tokenizer/model from HuggingFace...")
+        self.tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
 
     def tokenize_data(self, texts, padding=True, truncation=True, return_tensors="tf"):
         """
@@ -89,6 +85,7 @@ class DataPrep:
         Creates TensorFlow datasets from the DataFrames.
         """
         print("Creating TensorFlow datasets...")
+        self.download_tokenizer()
         train_encodings = self.tokenize_data(train_df['Cleaned_Reviews'].tolist())
         val_encodings = self.tokenize_data(val_df['Cleaned_Reviews'].tolist())
         test_encodings = self.tokenize_data(test_df['Cleaned_Reviews'].tolist())
@@ -113,11 +110,11 @@ class DataPrep:
 
 
 class ModelTrainer:
-    def __init__(self, model_dir, s3_output_model_bucket, s3_output_model_key, num_labels=3, learning_rate=5e-5):
+    def __init__(self, s3_output_model_bucket, s3_output_model_key, num_labels=3, learning_rate=5e-5):
         """
         Initializes the ModelTrainer with model configurations and S3 output details.
         """
-        self.model_dir = model_dir
+        self.model_dir = 'artifacts/model/'
         self.s3_output_model_bucket = s3_output_model_bucket
         self.s3_output_model_key = s3_output_model_key
         self.num_labels = num_labels
@@ -131,7 +128,7 @@ class ModelTrainer:
         """
         print("Initializing the model...")
         self.model = TFDistilBertForSequenceClassification.from_pretrained(
-            self.model_dir,
+            'distilbert-base-uncased',
             num_labels=self.num_labels
         )
         self.model.compile(
@@ -169,25 +166,19 @@ class ModelTrainer:
         print(f"Test Accuracy: {eval_acc}")
         return eval_acc
 
-    def save_model(self, trained_model_dir='artifacts/trained_model/'):
+    def save_model(self):
         """
         Saves the trained model to a specified directory.
         """
-        print(f"Saving the model to '{trained_model_dir}'...")
-        self.model.save_pretrained(trained_model_dir)
-        print(f"Model saved to '{trained_model_dir}'.")
+        self.model.save_pretrained(self.model_dir)
+        print(f"Model saved to '{self.model_dir}'.")
 
-    def upload_model_to_s3(self, trained_model_dir='artifacts/trained_model/'):
+    def upload_model_to_s3(self):
         """
         Uploads the trained model directory to S3.
         """
         print("Uploading trained model to S3...")
-        if model_to_s3(trained_model_dir, self.s3_output_model_bucket, self.s3_output_model_key):
+        if model_to_s3(self.model_dir, self.s3_output_model_bucket, self.s3_output_model_key):
             print("Trained model successfully uploaded to S3.")
         else:
             print("Failed to upload trained model to S3.")
-        
-        # Optional: Clean up local trained model directory
-        if os.path.exists(trained_model_dir):
-            shutil.rmtree(trained_model_dir)
-            print(f"Local trained model directory '{trained_model_dir}' removed.")

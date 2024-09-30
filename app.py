@@ -1,28 +1,49 @@
-from flask import Flask, render_template, request
-from components.predict import SentimentPredictor
+# app.py
+
 import os
 from dotenv import load_dotenv
+from flask import Flask, request, jsonify
+from components.predict import SentimentPredictor
+import logging
 
-app = Flask(__name__)
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
+# Load environment variables from .env file
 load_dotenv()
-S3_MODEL_BUCKET = os.getenv('S3_MODEL_BUCKET')
-S3_MODEL_KEY = os.getenv('S3_MODEL_KEY')
 
+# Fetch environment variables
+SAGEMAKER_ENDPOINT_NAME = os.getenv('SAGEMAKER_ENDPOINT_NAME', 'sentiment-analysis-endpoint')
+AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
+
+# Initialize the SentimentPredictor
+logger.info("Initializing SentimentPredictor...")
 predictor = SentimentPredictor(
-    s3_model_bucket=S3_MODEL_BUCKET,
-    s3_model_key=S3_MODEL_KEY
+    endpoint_name=SAGEMAKER_ENDPOINT_NAME,
+    region_name=AWS_REGION
 )
+logger.info("SentimentPredictor initialized successfully.")
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+# Initialize Flask app
+app = Flask(__name__)
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    input_text = request.form['inputText']
-    prediction = predictor.predict(input_text)
-    return render_template('index.html', prediction=prediction)
+    data = request.get_json()
+    if not data or 'review' not in data:
+        logger.warning("No review text provided in the request.")
+        return jsonify({'error': 'No review text provided.'}), 400
+    
+    input_text = data['review']
+    logger.info(f"Received review for prediction: {input_text}")
 
-if __name__ == '__main__':
+    try:
+        sentiment = predictor.predict(input_text)
+        return jsonify({'sentiment': sentiment}), 200
+    except Exception as e:
+        logger.error(f"Prediction Error: {e}")
+        return jsonify({'error': 'An unexpected error occurred.'}), 500
+
+if __name__ == "__main__":
     app.run(debug=True)
