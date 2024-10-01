@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 from components.data_collect import ScrapeData
-from components.utils import upload_to_s3
+from components.data_transform import Utils
 from dotenv import load_dotenv
 import logging
 
@@ -25,6 +25,7 @@ amazon_df.to_csv("artifacts/amazon_data.csv", index=False)
 S3_RAW_BUCKET = os.getenv('S3_RAW_BUCKET')
 S3_RAW_KEY = os.getenv('S3_RAW_KEY')
 
-upload_to_s3(amazon_df, S3_RAW_BUCKET, S3_RAW_KEY)
+util =Utils()
+util.put_data_s3(amazon_df, S3_RAW_BUCKET, S3_RAW_KEY)
 
 logger.info(f"---Uploaded Raw Data to S3---")

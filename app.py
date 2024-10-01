@@ -1,5 +1,3 @@
-# app.py
-
 import os
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
@@ -15,7 +13,7 @@ load_dotenv()
 
 # Fetch environment variables
 SAGEMAKER_ENDPOINT_NAME = os.getenv('SAGEMAKER_ENDPOINT_NAME', 'sentiment-analysis-endpoint')
-AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
+AWS_REGION = os.getenv('AWS_REGION')
 
 # Initialize the SentimentPredictor
 logger.info("Initializing SentimentPredictor...")
