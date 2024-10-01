@@ -7,7 +7,7 @@ from langdetect import detect, DetectorFactory
 from langdetect.lang_detect_exception import LangDetectException
 from transformers import pipeline
 from datasets import Dataset
-from src.components.utils import import_from_s3, upload_to_s3
+from components.utils import import_from_s3, upload_to_s3
 
 # Download necessary NLTK data
 nltk.download('stopwords')

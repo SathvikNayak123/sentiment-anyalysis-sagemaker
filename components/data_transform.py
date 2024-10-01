@@ -2,7 +2,7 @@ import tensorflow as tf
 from transformers import DistilBertTokenizer
 from sklearn.model_selection import StratifiedShuffleSplit
 import nltk
-from src.components.utils import import_from_s3, upload_to_s3
+from components.utils import import_from_s3, upload_to_s3
 
 # Download necessary NLTK data
 nltk.download('stopwords')

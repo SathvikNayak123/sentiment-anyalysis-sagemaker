@@ -1,7 +1,7 @@
 import os
 import pandas as pd
-from src.components.data_collect import ScrapeData
-from src.components.utils import upload_to_s3
+from components.data_collect import ScrapeData
+from components.utils import upload_to_s3
 from dotenv import load_dotenv
 import logging
 

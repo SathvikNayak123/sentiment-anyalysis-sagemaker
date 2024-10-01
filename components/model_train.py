@@ -2,7 +2,7 @@ import pandas as pd
 import tensorflow as tf
 from transformers import TFDistilBertForSequenceClassification
 import nltk
-from src.components.utils import model_to_s3
+from components.utils import model_to_s3
 
 # Download necessary NLTK data
 nltk.download('stopwords')

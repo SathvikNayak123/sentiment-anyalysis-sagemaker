@@ -3,7 +3,7 @@
 import os
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
-from components.predict import SentimentPredictor
+from predict import SentimentPredictor
 import logging
 
 # Configure logging
