@@ -1,6 +1,7 @@
 import os
 import logging
 import sagemaker
+from sagemaker.tensorflow import TensorFlowProcessor
 from sagemaker.huggingface import HuggingFaceProcessor
 from sagemaker.processing import ProcessingInput, ProcessingOutput
 from dotenv import load_dotenv, dotenv_values
@@ -36,13 +37,13 @@ def main():
     output_clean_s3_uri = f's3://{S3_CLEAN_BUCKET}/{S3_CLEAN_KEY}'
 
     # Define the script processor for data preprocessing
-    hfp = HuggingFaceProcessor(
-        role=SM_ROLE, 
+    tp = TensorFlowProcessor(
+        framework_version='2.3',
+        role=SM_ROLE,
+        instance_type='ml.p2.xlarge',
         instance_count=1,
-        instance_type='ml.m5.large',
-        transformers_version='4.4.2',
-        pytorch_version='1.6.0', 
-        base_job_name='frameworkprocessor-hf',
+        base_job_name='frameworkprocessor-TF',
+        py_version='py37',
         sagemaker_session=sm_session
     )
 
@@ -56,7 +57,7 @@ def main():
     logger.info("Starting the data preprocessing job...")
 
     # Run the preprocessing job
-    hfp.run(
+    tp.run(
         code='components/data_transform.py',
         source_dir='.',
         arguments=processing_arguments,
@@ -74,7 +75,7 @@ def main():
                 output_name='cleaned_data'
             )
         ],
-        wait=False,
+        wait=True,
         logs=True
     )
 

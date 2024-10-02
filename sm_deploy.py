@@ -1,7 +1,7 @@
 import os
 import sagemaker
 from sagemaker.tensorflow import TensorFlowModel
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
 import logging
 import boto3
 
@@ -9,15 +9,22 @@ import boto3
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def clear_env_cache():
+    env_vars = dotenv_values(".env")
+    for key in env_vars:
+        os.environ.pop(key, None)
+
 def main():
-    # Load environment variables
+
+    clear_env_cache()
+    
     load_dotenv()
 
     # Fetch configurations
     S3_MODEL_BUCKET = os.getenv('S3_MODEL_BUCKET')
     S3_MODEL_KEY = os.getenv('S3_MODEL_KEY')
     ROLE = os.getenv('SM_ROLE')
-    ENDPOINT_NAME = "sentiment-analysis-endpoint"
+    ENDPOINT_NAME = os.getenv('ENDPOINT_NAME')
     AWS_REGION = os.getenv('AWS_REGION')
 
     # Initialize SageMaker session
@@ -31,7 +38,6 @@ def main():
         model_data=model_data,
         role=ROLE,
         framework_version='2.16.2',
-        py_version='py310',
         sagemaker_session=sagemaker_session
     )
 
