@@ -1,5 +1,3 @@
-import subprocess
-import sys
 import tensorflow as tf
 from transformers import DistilBertTokenizer
 from sklearn.model_selection import StratifiedShuffleSplit
@@ -10,13 +8,9 @@ from langdetect import detect, DetectorFactory
 from langdetect.lang_detect_exception import LangDetectException
 from transformers import pipeline
 from datasets import Dataset
-import argparse
 import logging
 import re
-import boto3
-from io import StringIO
-import pandas as pd
-from botocore.exceptions import NoCredentialsError, ClientError
+from utils import Utils
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,42 +20,11 @@ nltk.download('stopwords')
 nltk.download('wordnet')
 nltk.download('omw-1.4')
 
-class Utils:
-    def __init__(self):
-        self.s3_client=boto3.client('s3')
-
-    def get_data_s3(self, s3_bucket, s3_key):
-
-        try:
-            # Get the CSV object from S3
-            response = self.s3_client.get_object(Bucket=s3_bucket, Key=s3_key)
-            # Read the CSV data into a pandas DataFrame
-            csv_content = response['Body'].read().decode('utf-8')
-            df = pd.read_csv(StringIO(csv_content))
-            return df
-        except ClientError as e:
-            print(f"Failed to retrieve data from S3: {e}")
-            return None
-
-    def put_data_s3(self, df, s3_bucket, s3_key):
-
-        csv_buffer = StringIO()
-        df.to_csv(csv_buffer, index=False)
-        try:
-            self.s3_client.put_object(Bucket=s3_bucket, Key=s3_key, Body=csv_buffer.getvalue())
-            print(f"Data successfully uploaded to s3://{s3_bucket}/{s3_key}")
-            return True
-        except ClientError as e:
-            print(f"Failed to upload to S3: {e}")
-            return False
-
-
 class DataProcessor:
-    def __init__(self, s3_raw_bucket, s3_raw_key, s3_clean_bucket, s3_clean_key):
-        self.s3_raw_bucket = s3_raw_bucket
-        self.s3_raw_key = s3_raw_key
-        self.s3_clean_bucket = s3_clean_bucket
-        self.s3_clean_key = s3_clean_key
+    def __init__(self, bucket=None, raw_key=None, clean_key=None):
+        self.bucket = bucket
+        self.raw_key = raw_key
+        self.clean_key = clean_key
 
         self.stop_words = set(stopwords.words('english'))
         self.lemmatizer = WordNetLemmatizer()
@@ -71,11 +34,11 @@ class DataProcessor:
         DetectorFactory.seed = 0
         self.class_weights = {'positive': 1.0,'negative': 1.0,'neutral': 10.0}
 
-        self.utils = Utils()
         self.amazon_df = None
+        self.utils = Utils()
 
     def import_data_from_s3(self):
-        self.amazon_df = self.utils.get_data_s3(self.s3_raw_bucket, self.s3_raw_key)
+        self.amazon_df = self.utils.get_data_s3(self.bucket, self.raw_key)
 
     def detect_language(self, text):
         try:
@@ -148,17 +111,16 @@ class DataProcessor:
         return classified_df
 
     def save_cleaned_data_to_s3(self, classified_df):
-        return self.utils.put_data_s3(classified_df, self.s3_clean_bucket, self.s3_clean_key)
+        return self.utils.put_data_s3(classified_df, self.bucket, self.clean_key)
     
 class Split_Tokenize_Data:
-    def __init__(self, s3_clean_bucket, s3_clean_key, s3_data_bucket, s3_train_key, s3_val_key, s3_test_key):
+    def __init__(self, bucket=None, clean_key=None, train_key=None, val_key=None, test_key=None):
 
-        self.s3_clean_bucket = s3_clean_bucket
-        self.s3_clean_key = s3_clean_key
-        self.s3_data_bucket = s3_data_bucket
-        self.s3_train_key = s3_train_key
-        self.s3_val_key = s3_val_key
-        self.s3_test_key = s3_test_key
+        self.bucket = bucket
+        self.clean_key = clean_key
+        self.train_key = train_key
+        self.val_key = val_key
+        self.test_key = test_key
 
         self.label_map = {'positive': 2, 'neutral': 1, 'negative': 0}
         self.tokenizer = None
@@ -167,7 +129,7 @@ class Split_Tokenize_Data:
         self.clean_df = None
 
     def import_data_from_s3(self):
-        self.clean_df = self.utils.get_data_s3(self.s3_clean_bucket, self.s3_clean_key)
+        self.clean_df = self.utils.get_data_s3(self.bucket, self.clean_key)
 
     def preprocess_data(self):
         """
@@ -234,65 +196,8 @@ class Split_Tokenize_Data:
         val_dataset.save('artifacts/val_data')
         test_dataset.save('artifacts/test_data')
 
-        print("-----------Saved Train, Val and Test datasets to artifacts--------\n")
-    
-def main(args):
-    
-    S3_RAW_BUCKET = args.s3_raw_bucket
-    S3_RAW_KEY = args.s3_raw_key
-    S3_CLEAN_BUCKET = args.s3_clean_bucket
-    S3_CLEAN_KEY = args.s3_clean_key
+        self.utils.upload_directory_to_s3('artifacts/train_data', self.bucket, self.train_key)
+        self.utils.upload_directory_to_s3('artifacts/val_data', self.bucket, self.val_key)
+        self.utils.upload_directory_to_s3('artifacts/test_data', self.bucket, self.test_key)
 
-    logger.info(f"---Data Preprocess Starting---")
-
-    processor = DataProcessor(S3_RAW_BUCKET, S3_RAW_KEY, S3_CLEAN_BUCKET, S3_CLEAN_KEY)
-    processor.import_data_from_s3()
-    classified_df = processor.ProcessReviews()
-    processor.save_cleaned_data_to_s3(classified_df)
-
-    logger.info(f"---Splitting & Tokenizing Data---")
-
-    transform = Split_Tokenize_Data(S3_CLEAN_BUCKET, S3_CLEAN_KEY)
-    transform.import_data_from_s3()
-    train_df, val_df, test_df = transform.preprocess_data()
-    train_dataset, val_dataset, test_dataset = transform.create_datasets(train_df, val_df, test_df)
-    transform.save_all_datasets(train_dataset, val_dataset, test_dataset)
-
-    logger.info(f"---Data Transformation Complete---")
-
-if __name__ == "__main__":
-
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
-
-    parser = argparse.ArgumentParser(description="SageMaker Preprocessing Script")
-
-    # Input S3 paths
-    parser.add_argument(
-        "--s3-raw-bucket",
-        type=str,
-        required=True,
-        help="S3 bucket containing raw data"
-    )
-    parser.add_argument(
-        "--s3-raw-key",
-        type=str,
-        required=True,
-        help="S3 key (prefix) for raw data"
-    )
-
-    # Output S3 paths
-    parser.add_argument(
-        "--s3-clean-bucket",
-        type=str,
-        required=True,
-        help="S3 bucket to store cleaned data"
-    )
-    parser.add_argument(
-        "--s3-clean-key",
-        type=str,
-        required=True,
-        help="S3 key (prefix) for cleaned data"
-    )
-
-    args = parser.parse_args()
-    main(args)
+        print("-----------Saved Train, Val and Test datasets--------\n")

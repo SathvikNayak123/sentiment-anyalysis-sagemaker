@@ -1,46 +1,33 @@
-import boto3
-import json
-import logging
-from components.data_transform import DataProcessor
+from data_transform import DataProcessor, Split_Tokenize_Data
+import tensorflow as tf
+from transformers import DistilBertTokenizer, TFDistilBertForSequenceClassification
+import numpy as np
+import re
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+import nltk
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+
 
 class SentimentPredictor:
-    def __init__(self, endpoint_name, region_name='eu-north-1'):
-        """
-        Initializes the SentimentPredictor by setting up the SageMaker runtime client.
-        """
-        self.endpoint_name = endpoint_name
-        self.region_name = region_name
-        self.sagemaker_runtime = boto3.client('sagemaker-runtime', region_name=self.region_name)
-        self.preprocessor = DataProcessor(None,None,None,None)
+    def __init__(self, input):
+        self.input=input
+        self.preprocessor = DataProcessor()
+        self.tokenize = Split_Tokenize_Data()
+        self.model = TFDistilBertForSequenceClassification.from_pretrained('artifacts/model')
 
-    def preprocess(self, input_text):
-        """
-        Preprocess the input text as required by the model.
-        """
-        payload = self.preprocessor.preprocess_review(input_text)
-        return payload
+    def preprocess(self):
+        self.input = self.preprocessor.preprocess_review(self.input)
+        self.tokenize.download_tokenizer()
+        self.input = self.tokenize.tokenize_data(self.input)
 
-    def predict(self, input_text):
-        """
-        Sends the preprocessed text to the SageMaker endpoint and returns the prediction.
-        """
-        payload = self.preprocess(input_text)
+    def predict(self):
+        self.preprocess()
         
-        try:
-            response = self.sagemaker_runtime.invoke_endpoint(
-                EndpointName=self.endpoint_name,
-                ContentType='application/json',
-                Body=payload
-            )
-            
-            result = json.loads(response['Body'].read().decode())
-            sentiment = result.get('sentiment', 'unknown')  # Adjust based on your model's output
-            logger.info(f"Predicted Sentiment: {sentiment}")
-            return sentiment
-        except Exception as e:
-            logger.error(f"Error during prediction: {e}")
-            return "error"
+        logits = self.model(**self.input).logits
+        prediction = np.argmax(logits, axis=1).numpy()[0]
+
+        predicted_label = self.tokenize.label_map[prediction]
+        return predicted_label
+
+    
