@@ -22,10 +22,10 @@ os.makedirs("artifacts", exist_ok=True)
 amazon_df = pd.DataFrame(obj.amazon_reviews, columns=["Review"])
 amazon_df.to_csv("artifacts/amazon_data.csv", index=False)
 
-S3_RAW_BUCKET = os.getenv('S3_RAW_BUCKET')
-S3_RAW_KEY = os.getenv('S3_RAW_KEY')
+BUCKET = os.getenv('bucket')
+RAW_KEY = os.getenv('raw')
 
 util =Utils()
-util.put_data_s3(amazon_df, S3_RAW_BUCKET, S3_RAW_KEY)
+util.put_data_s3(amazon_df, BUCKET, RAW_KEY)
 
 logger.info(f"---Uploaded Raw Data to S3---")
